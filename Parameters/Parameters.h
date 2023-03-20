@@ -10,10 +10,17 @@
 class Parameters {
 
 public:
-    using PairFile = std::pair<const char*, std::shared_ptr<struct stat>>;
+    using PairFile = std::pair<const char*, std::unique_ptr<struct stat>>;
+
+    enum class ParseResult{
+        SUCCESS,
+        HELP,
+        ERROR_PARSE
+    };
 
     struct Input {
         uint8_t flags = noFlags;
+        ParseResult result = ParseResult::SUCCESS;
         std::list<const char*> dirs;
         std::list<PairFile> files;
     };
@@ -21,8 +28,6 @@ public:
 private:
     Parameters();
     Input input;
-
-    static void printUsage();
 
 public:
     static constexpr uint8_t noFlags = 0;

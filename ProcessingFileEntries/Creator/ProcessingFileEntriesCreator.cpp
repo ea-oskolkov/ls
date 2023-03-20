@@ -3,12 +3,9 @@
 #include "../Long/ProcessingFileEntriesLong.h"
 #include "../Simply/ProcessingFileEntriesSimply.h"
 
-std::shared_ptr<ProcessingFileEntries> ProcessingFileEntriesCreator::create(uint8_t flags) {
-    ProcessingFileEntries* ptr;
+std::unique_ptr<ProcessingFileEntries> ProcessingFileEntriesCreator::create(uint8_t flags) {
     if (flags & Parameters::longFlag)
-        ptr = new ProcessingFileEntriesLong(flags);
-    else
-        ptr = new ProcessingFileEntriesSimply(flags);
+        return std::make_unique<ProcessingFileEntriesLong>(flags);
 
-    return std::shared_ptr<ProcessingFileEntries>(ptr);
+    return std::make_unique<ProcessingFileEntriesSimply>(flags);
 }

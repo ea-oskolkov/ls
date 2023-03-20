@@ -6,7 +6,7 @@
 
 class ProcessingFileEntriesCreator {
 public:
-    static std::shared_ptr<ProcessingFileEntries> create(uint8_t flags);
+    static std::unique_ptr<ProcessingFileEntries> create(uint8_t flags);
 
 };
 

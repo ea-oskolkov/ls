@@ -19,19 +19,19 @@ void ProcessingFileEntriesLong::process(const char* dirPath, struct dirent *dirE
 
     // Get info about file
     struct stat st;
-    if (lstat(fullPath.c_str(), &st) != 0) {
-        std::cerr << "stat return error " << std::endl;
-        exit(EXIT_FAILURE);
-    }
+    if (lstat(fullPath.c_str(), &st) != 0)
+        throw std::runtime_error("lstat return error");
 
     // Create new file item
-    auto* newItem = new FileItem(&st, dirEntry->d_name, fullPath.c_str(), funcSz);
+    auto newItem = FileItem::make(&st, dirEntry->d_name, fullPath.c_str(), funcSz);
+    if (!newItem)
+        throw std::runtime_error("FileItem make error");
 
     // Calculate blocks count
     totalBlockCount += st.st_blocks;
 
     // Insert to list
-    listItem.push_back(newItem);
+    listItem.push_back(std::move(newItem.value()));
 }
 
 void ProcessingFileEntriesLong::process(struct stat *st, const char* filePath) {
@@ -39,10 +39,12 @@ void ProcessingFileEntriesLong::process(struct stat *st, const char* filePath) {
         throw std::invalid_argument("pointer is null");
 
     // Create new file item
-    auto* newItem = new FileItem(st, filePath, nullptr, funcSz);
+    auto newItem = FileItem::make(st, filePath, nullptr, funcSz);
+    if (!newItem)
+        throw std::runtime_error("FileItem make error");
 
     // Insert to list
-    listItem.push_back(newItem);
+    listItem.push_back(std::move(newItem.value()));
 }
 
 void ProcessingFileEntriesLong::push() {
@@ -50,12 +52,12 @@ void ProcessingFileEntriesLong::push() {
     // Sort
     sortItems();
 
-    // ProcessingFileEntries total block count
-    std::cout << "total ";
-    if (listItem.empty())
-        std::cout << 0 << std::endl;
-
     if (!onlyFilepath) {
+
+        // ProcessingFileEntries total block count
+        std::cout << "total ";
+        if (listItem.empty())
+            std::cout << 0 << std::endl;
 
         // Output as in the original utility ls
         totalBlockCount *= defaultBlockSize;
@@ -108,13 +110,13 @@ void ProcessingFileEntriesLong::push() {
 
 void ProcessingFileEntriesLong::sortItems() {
     const bool desc = flags & Parameters::descOrderFlag;
-    std::function<bool(const FileItem* d1, const FileItem* d2)> comparator;
+    std::function<bool(const std::unique_ptr<FileItem>& d1, const std::unique_ptr<FileItem>& d2)> comparator;
 
     if (desc) // Descending order
-        comparator = [](const FileItem* d1, const FileItem* d2)
+        comparator = [](const std::unique_ptr<FileItem>& d1, const std::unique_ptr<FileItem>& d2)
                 {return strcasecmp(d1->getFileName().c_str(), d2->getFileName().c_str())>0;};
     else
-        comparator = [](const FileItem* d1, const FileItem* d2)
+        comparator = [](const std::unique_ptr<FileItem>& d1, const std::unique_ptr<FileItem>& d2)
                 {return strcasecmp(d1->getFileName().c_str(), d2->getFileName().c_str())<=0;};
 
     listItem.sort(comparator);
@@ -166,8 +168,8 @@ void ProcessingFileEntriesLong::fillIdentsInColumns() {
 
 }
 
-ProcessingFileEntriesLong::ProcessingFileEntriesLong(uint8_t flags)
-        : ProcessingFileEntries(flags) {
+ProcessingFileEntriesLong::ProcessingFileEntriesLong(uint8_t flags):onlyFilepath(true)
+        , ProcessingFileEntries(flags) {
 
     if (flags & Parameters::humanFormatFlag)
         funcSz = Auxiliary::getSizeHumanFormat;
@@ -177,15 +179,8 @@ ProcessingFileEntriesLong::ProcessingFileEntriesLong(uint8_t flags)
 
 void ProcessingFileEntriesLong::clear() {
     totalBlockCount = 0;
-    freeList();
     listItem.clear();
     memset(&identsInColumns, 0, sizeof(identsInColumns));
 }
 
-ProcessingFileEntriesLong::~ProcessingFileEntriesLong() {
-    freeList();
-}
-
-void ProcessingFileEntriesLong::freeList() {
-    std::for_each(listItem.begin(), listItem.end(), [](FileItem* p){delete p;});
-}
+ProcessingFileEntriesLong::~ProcessingFileEntriesLong() = default;

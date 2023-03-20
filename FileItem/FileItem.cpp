@@ -88,22 +88,18 @@ void FileItem::fillDateTime(__time_t mtime) {
 
     // Fill monthBuff
     buff[3] = '\0';
-    if (strftime(buff, sizeof(buff), "%b", &mtimeTm) == 0) {
-        std::cerr << "strftime return 0" << std::endl;
-        exit(EXIT_FAILURE);
-    }
+    if (strftime(buff, sizeof(buff), "%b", &mtimeTm) == 0)
+        throw std::runtime_error("strftime return 0");
     dateColumn1 = buff;
 
     // Fill dayBuff
     buff[2] = '\0';
-    if (strftime(buff, sizeof(buff), "%e", &mtimeTm) == 0) {
-        std::cerr << "strftime return 0" << std::endl;
-        exit(EXIT_FAILURE);
-    }
+    if (strftime(buff, sizeof(buff), "%e", &mtimeTm) == 0)
+        throw std::runtime_error("strftime return 0");
     dateColumn2 = buff;
 
     // Fill time or year
-    auto currentTime = std::time(nullptr);
+    time_t currentTime = std::time(nullptr);
     std::tm* currentTm = std::localtime(&currentTime);
 
     if (showYear(&mtimeTm, currentTm, mtime, currentTime)) {
@@ -112,10 +108,9 @@ void FileItem::fillDateTime(__time_t mtime) {
     } else {
         // Time
         buff[5] = '\0';
-        if (strftime(buff, sizeof(buff), "%H:%M", &mtimeTm) == 0) {
-            std::cerr << "strftime return 0" << std::endl;
-            exit(EXIT_FAILURE);
-        }
+        if (strftime(buff, sizeof(buff), "%H:%M", &mtimeTm) == 0)
+            throw std::runtime_error("strftime return 0");
+
         dateColumn3 = buff;
     }
 
@@ -141,42 +136,6 @@ const std::string &FileItem::getLinkPath() const {
 
 const std::string &FileItem::getFileName() const {
     return fileName;
-}
-
-FileItem::FileItem(struct stat *st, const char *fileName, const char *fullPath, FuncSz funcSz) {
-
-    if (st == nullptr || fileName == nullptr || fullPath == nullptr || funcSz == nullptr)
-        throw std::invalid_argument("arg is null");
-
-    if (S_ISLNK(st->st_mode)) {
-        char buffLinkPath[PATH_MAX+1];
-        const ssize_t sz = readlink(fullPath, buffLinkPath, sizeof(buffLinkPath) - sizeof(char));
-        if (sz != -1) {
-            buffLinkPath[sz] = '\0';
-            this->linkPath.reserve(sz);
-            this->linkPath.append(buffLinkPath);
-        } else {
-            std::cerr << "readlink return error" << std::endl;
-            exit(EXIT_FAILURE);
-        }
-    }
-
-    if (S_ISBLK(st->st_mode) || S_ISCHR(st->st_mode)) {
-        uint8_t major = st->st_rdev>>8;
-        uint8_t minor = st->st_rdev;
-        this->sizeStr
-        .append(std::to_string(major))
-        .append(", ")
-        .append(std::to_string(minor));
-    } else
-        this->sizeStr = funcSz(st->st_size);
-
-    this->fileName = fileName;
-    this->access = getAccessStr(st->st_mode);
-    this->userName = getUsername(st->st_uid);
-    this->groupName = getGroupname(st->st_gid);
-    this->hardLinkCount = st->st_nlink;
-    fillDateTime(st->st_mtime);
 }
 
 const std::string &FileItem::getDateColumn1() const {
@@ -224,5 +183,52 @@ bool FileItem::showYear(std::tm *inputTm, std::tm *currentTm, __time_t inputTime
     }
 
     return false;
+}
+
+std::optional<std::unique_ptr<FileItem>> FileItem::make(struct stat* st, const char* fileName, const char* fullPath,
+        FuncSz funcSz) {
+
+    if (st == nullptr || fileName == nullptr || funcSz == nullptr)
+        return std::nullopt;
+
+    auto rawPtr = new FileItem();
+    auto fileItemPtr = std::unique_ptr<FileItem>(rawPtr);
+
+    if (S_ISLNK(st->st_mode)) {
+        if (fullPath == nullptr)
+            return std::nullopt;
+
+        char buffLinkPath[PATH_MAX+1];
+        const ssize_t sz = readlink(fullPath, buffLinkPath, sizeof(buffLinkPath) - sizeof(char));
+        if (sz != -1) {
+            buffLinkPath[sz] = '\0';
+            fileItemPtr->linkPath.reserve(sz);
+            fileItemPtr->linkPath.append(buffLinkPath);
+        } else
+            throw std::runtime_error("readlink return error");
+    }
+
+    if (S_ISBLK(st->st_mode) || S_ISCHR(st->st_mode)) {
+        uint8_t major = st->st_rdev>>8;
+        uint8_t minor = st->st_rdev;
+        fileItemPtr->sizeStr
+                .append(std::to_string(major))
+                .append(", ")
+                .append(std::to_string(minor));
+    } else
+        fileItemPtr->sizeStr = funcSz(st->st_size);
+
+    fileItemPtr->fileName = fileName;
+    fileItemPtr->access = getAccessStr(st->st_mode);
+    fileItemPtr->userName = getUsername(st->st_uid);
+    fileItemPtr->groupName = getGroupname(st->st_gid);
+    fileItemPtr->hardLinkCount = st->st_nlink;
+    fileItemPtr->fillDateTime(st->st_mtime);
+
+    return fileItemPtr;
+}
+
+FileItem::FileItem() {
+
 }
 

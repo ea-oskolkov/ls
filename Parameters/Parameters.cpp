@@ -21,9 +21,8 @@ Parameters::Input& Parameters::parse(int argc, char **argv) {
     while((option = getopt_long(argc, argv, short_options, long_options, nullptr)) != -1) {
         switch(option) {
             case 0:
-                printUsage();
-                exit(EXIT_SUCCESS);
-                //break;
+                input.result = ParseResult::HELP;
+                return input;
             case 'l':
                 input.flags |= longFlag;
                 break;
@@ -34,10 +33,8 @@ Parameters::Input& Parameters::parse(int argc, char **argv) {
                 input.flags |= descOrderFlag;
                 break;
             default:
-                std::cerr
-                << "This tool supports -l, -r, -h options"
-                << std::endl;
-                exit(2); // According to MAN original utility
+                input.result = ParseResult::ERROR_PARSE;
+                return input;
         }
     }
 
@@ -45,18 +42,15 @@ Parameters::Input& Parameters::parse(int argc, char **argv) {
     for (int i=1; i < argc; ++i) {
         if (argv[i][0] != '-') {
 
-            auto st = new struct stat;
-            if (lstat(argv[i], st) != 0) {
-                std::cerr << "stat return error" << std::endl;
-                exit(EXIT_FAILURE);
-            }
+            auto st = std::make_unique<struct stat>();
+            if (lstat(argv[i], st.get()) != 0)
+                throw std::runtime_error("lstat return error");
 
-            std::shared_ptr<struct stat> stPtr(st);
             if (S_ISDIR(st->st_mode))
                 input.dirs.push_back(argv[i]);
             else {
                 // Let's save the stat so as not to request twice
-                input.files.emplace_back(argv[i], stPtr);
+                input.files.emplace_back(argv[i], std::move(st));
             }
         }
     }
@@ -77,34 +71,4 @@ Parameters &Parameters::getInstance() {
 
 const Parameters::Input &Parameters::getInput() const {
     return input;
-}
-
-void Parameters::printUsage() {
-    std::cout
-        << "A simplified analogue of the UNIX utility ls."
-        << std::endl
-        << "Usage: ls [OPTION]... [FILE]..."
-        << std::endl
-        << "List information about the FILEs (the current directory by default)."
-        << std::endl
-        << "Sort entries alphabetically"
-        << std::endl
-        << "Supported options:"
-        << std::endl
-        << " -h\twith -l, print sizes like 1K 234M 2G etc."
-        << std::endl
-        << " -l\tuse a long listing format"
-        << std::endl
-        << " -r\treverse order while sorting"
-        << std::endl
-        << " --help\tdisplay this help and exit"
-        << std::endl
-        << "Exit status:"
-        << std::endl
-        << " 0  if OK,"
-        << std::endl
-        << " 1  if minor problems (e.g., cannot access subdirectory),"
-        << std::endl
-        << " 2  if serious trouble (e.g., cannot access command-line argument)."
-        << std::endl;
 }

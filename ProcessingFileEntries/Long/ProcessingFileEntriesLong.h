@@ -22,10 +22,10 @@ private:
     static constexpr uint64_t defaultBlockSize = 512;
     static constexpr uint64_t defaultBlockSizeLsTool = 1024;
     uint64_t totalBlockCount = 0;
-    std::list<FileItem*> listItem;
+    std::list<std::unique_ptr<FileItem>> listItem;
     IdentsInColumns identsInColumns;
 
-    bool onlyFilepath = true;
+    bool onlyFilepath;
 
     void sortItems();
     void fillIdentsInColumns();

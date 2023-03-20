@@ -7,7 +7,7 @@
 #include <sys/stat.h>
 #include <memory>
 #include <ctime>
-
+#include <optional>
 
 using FuncSz = std::string(*)(uint64_t sz);
 
@@ -32,10 +32,11 @@ private:
     static std::string getGroupname(__gid_t _gid);
 
     static bool showYear(std::tm* inputTm, std::tm* currentTm, __time_t inputTime, __time_t currentTime);
-
+    FileItem();
 public:
 
-    FileItem(struct stat* st, const char* fileName, const char* fullPath, FuncSz funcSz);
+    static std::optional<std::unique_ptr<FileItem>> make(struct stat* st, const char* fileName, const char* fullPath,
+            FuncSz funcSz);
 
     const std::string &getAccess() const;
 
