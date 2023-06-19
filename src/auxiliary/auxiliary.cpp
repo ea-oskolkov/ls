@@ -1,13 +1,16 @@
-#include "Auxiliary.h"
+#include "auxiliary.h"
+
 #include <sstream>
 #include <iomanip>
-#include <algorithm>
 
 namespace Auxiliary {
 
     static std::string doubleToString(long double value, int n) {
         std::stringstream ss;
-        ss << std::fixed << std::setprecision(n) << value;
+        ss
+                << std::fixed
+                << std::setprecision(n)
+                << value;
         return ss.str();
     }
 
@@ -30,8 +33,8 @@ namespace Auxiliary {
                         'Q'
                 };
 
-        static constexpr uint64_t divider = 1024ul;
-        static constexpr int unitsArrMaxIdx = (sizeof(unitsOfInformation) / sizeof(unitsOfInformation[0])) - 1;
+        static constexpr uint64_t divider = 1024ull;
+        static constexpr int unitsArrMaxIdx = (int)(sizeof(unitsOfInformation) / sizeof(unitsOfInformation[0])) - 1;
 
         if (sz < divider)
             return getSizeDefaultFormat(sz);
@@ -42,7 +45,7 @@ namespace Auxiliary {
         long double value = sz;
 
         while (value >= divider && arrIdx < unitsArrMaxIdx) {
-            value /= (long double)divider;
+            value /= (long double) divider;
             ++arrIdx;
         }
 

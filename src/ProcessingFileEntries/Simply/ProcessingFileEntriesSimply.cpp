@@ -1,25 +1,20 @@
 #include "ProcessingFileEntriesSimply.h"
-#include "../../Parameters/Parameters.h"
+
 #include <iostream>
 #include <iterator>
 #include <algorithm>
+#include <cstring>
 
-
-void ProcessingFileEntriesSimply::process(const char* dirPath, struct dirent *dirEntry) {
-    if (dirPath == nullptr || dirEntry == nullptr)
-        throw std::invalid_argument("arg is null");
-
+void ProcessingFileEntriesSimply::process(const char* dirPath, const struct dirent *dirEntry) {
     listItem.emplace_back(dirEntry->d_name);
 }
 
 void ProcessingFileEntriesSimply::process(struct stat *st, const char *filePath) {
-    if (st == nullptr || filePath == nullptr)
-        throw std::invalid_argument("arg is null");
-
     listItem.emplace_back(filePath);
 }
 
 void ProcessingFileEntriesSimply::push() {
+
     // Sort
     sort();
 
@@ -32,7 +27,7 @@ void ProcessingFileEntriesSimply::clear() {
 }
 
 void ProcessingFileEntriesSimply::sort() {
-    const bool desc = flags & Parameters::descOrderFlag;
+    const bool desc = flags & FlagsMode::descOrder;
     std::function<bool(const std::string& d1, const std::string& d2)> comparator;
 
     if (desc) // Descending order

@@ -1,3 +1,6 @@
+#include "ProcessingFileEntriesLong.h"
+#include "../../auxiliary/auxiliary.h"
+
 #include <iostream>
 #include <iomanip>
 #include <algorithm>
@@ -5,16 +8,9 @@
 #include <sys/stat.h>
 #include <cstring>
 
-#include "ProcessingFileEntriesLong.h"
-#include "../../Parameters/Parameters.h"
-#include "../../Auxiliary/Auxiliary.h"
+void ProcessingFileEntriesLong::process(const char *dirPath, const struct dirent *dirEntry) {
 
-void ProcessingFileEntriesLong::process(const char* dirPath, struct dirent *dirEntry) {
-
-    if (dirPath == nullptr || dirEntry == nullptr)
-        throw std::invalid_argument("pointer is null");
-
-    const auto& fullPath = buildFullPath(dirPath, dirEntry->d_name);
+    const std::string &fullPath = buildFullPath(dirPath, dirEntry->d_name);
     onlyFilepath = false;
 
     // Get info about file
@@ -22,29 +18,43 @@ void ProcessingFileEntriesLong::process(const char* dirPath, struct dirent *dirE
     if (lstat(fullPath.c_str(), &st) != 0)
         throw std::runtime_error("lstat return error");
 
+    char *linkPath = nullptr;
+    char buffLinkPath[PATH_MAX + 1];
+    if (S_ISLNK(st.st_mode)) {
+        const ssize_t sizeStrLnk = readlink(fullPath.c_str(), buffLinkPath, sizeof(buffLinkPath) - sizeof(char));
+        if (sizeStrLnk != -1) {
+            buffLinkPath[sizeStrLnk] = '\0';
+            linkPath = buffLinkPath;
+        }
+    }
+
     // Create new file item
-    auto newItem = FileItem::make(&st, dirEntry->d_name, fullPath.c_str(), funcSz);
-    if (!newItem)
-        throw std::runtime_error("FileItem make error");
+    std::unique_ptr<FileItem> fileItem = std::make_unique<FileItem>(&st, dirEntry->d_name, linkPath, funcSizeToStr);
 
     // Calculate blocks count
     totalBlockCount += st.st_blocks;
 
-    // Insert to list
-    listItem.push_back(std::move(newItem.value()));
+    // Insert item to list
+    listItem.push_back(std::move(fileItem));
 }
 
-void ProcessingFileEntriesLong::process(struct stat *st, const char* filePath) {
-    if (st == nullptr || filePath == nullptr)
-        throw std::invalid_argument("pointer is null");
+void ProcessingFileEntriesLong::process(struct stat *st, const char *fileName) {
+
+    char *linkPath = nullptr;
+    char buffLinkPath[PATH_MAX + 1];
+    if (S_ISLNK(st->st_mode)) {
+        const ssize_t sizeStrLnk = readlink(fileName, buffLinkPath, sizeof(buffLinkPath) - sizeof(char));
+        if (sizeStrLnk != -1) {
+            buffLinkPath[sizeStrLnk] = '\0';
+            linkPath = buffLinkPath;
+        }
+    }
 
     // Create new file item
-    auto newItem = FileItem::make(st, filePath, nullptr, funcSz);
-    if (!newItem)
-        throw std::runtime_error("FileItem make error");
+    std::unique_ptr<FileItem> fileItem = std::make_unique<FileItem>(st, fileName, linkPath, funcSizeToStr);
 
     // Insert to list
-    listItem.push_back(std::move(newItem.value()));
+    listItem.push_back(std::move(fileItem));
 }
 
 void ProcessingFileEntriesLong::push() {
@@ -63,10 +73,10 @@ void ProcessingFileEntriesLong::push() {
         totalBlockCount *= defaultBlockSize;
         totalBlockCount /= defaultBlockSizeLsTool;
 
-        if (flags & Parameters::humanFormatFlag)
+        if (flags & FlagsMode::humanSizeFormat)
             totalBlockCount *= defaultBlockSizeLsTool;
 
-        std::cout << funcSz(totalBlockCount);
+        std::cout << funcSizeToStr(totalBlockCount);
         std::cout << std::endl;
     }
 
@@ -74,7 +84,7 @@ void ProcessingFileEntriesLong::push() {
     fillIdentsInColumns();
 
     // ProcessingFileEntries items
-    for (const auto& item : listItem) {
+    for (const auto &item: listItem) {
         std::cout
                 << item->getAccess()
                 << " "
@@ -109,26 +119,28 @@ void ProcessingFileEntriesLong::push() {
 }
 
 void ProcessingFileEntriesLong::sortItems() {
-    const bool desc = flags & Parameters::descOrderFlag;
-    std::function<bool(const std::unique_ptr<FileItem>& d1, const std::unique_ptr<FileItem>& d2)> comparator;
+    const bool desc = flags & FlagsMode::descOrder;
+    std::function<bool(const std::unique_ptr<FileItem> &d1, const std::unique_ptr<FileItem> &d2)> comparator;
 
     if (desc) // Descending order
-        comparator = [](const std::unique_ptr<FileItem>& d1, const std::unique_ptr<FileItem>& d2)
-                {return strcasecmp(d1->getFileName().c_str(), d2->getFileName().c_str())>0;};
+        comparator = [](const std::unique_ptr<FileItem> &d1, const std::unique_ptr<FileItem> &d2) {
+            return strcasecmp(d1->getFileName().c_str(), d2->getFileName().c_str()) > 0;
+        };
     else
-        comparator = [](const std::unique_ptr<FileItem>& d1, const std::unique_ptr<FileItem>& d2)
-                {return strcasecmp(d1->getFileName().c_str(), d2->getFileName().c_str())<=0;};
+        comparator = [](const std::unique_ptr<FileItem> &d1, const std::unique_ptr<FileItem> &d2) {
+            return strcasecmp(d1->getFileName().c_str(), d2->getFileName().c_str()) <= 0;
+        };
 
     listItem.sort(comparator);
 }
 
 void ProcessingFileEntriesLong::fillIdentsInColumns() {
 
-    for (const auto& item : listItem) {
+    for (const auto &item: listItem) {
         // Hardlink
         uint64_t tmp = item->getHardLinkCount();
         uint64_t cnt = 0;
-        while (tmp){
+        while (tmp) {
             tmp /= 10;
             ++cnt;
         }
@@ -168,19 +180,30 @@ void ProcessingFileEntriesLong::fillIdentsInColumns() {
 
 }
 
-ProcessingFileEntriesLong::ProcessingFileEntriesLong(uint8_t flags):onlyFilepath(true)
-        , ProcessingFileEntries(flags) {
+ProcessingFileEntriesLong::ProcessingFileEntriesLong(FlagMode_t flags) :
+        onlyFilepath(true), ProcessingFileEntries(flags) {
 
-    if (flags & Parameters::humanFormatFlag)
-        funcSz = Auxiliary::getSizeHumanFormat;
+    if (flags & FlagsMode::humanSizeFormat)
+        funcSizeToStr = Auxiliary::getSizeHumanFormat;
     else
-        funcSz = Auxiliary::getSizeDefaultFormat;
+        funcSizeToStr = Auxiliary::getSizeDefaultFormat;
 }
 
 void ProcessingFileEntriesLong::clear() {
     totalBlockCount = 0;
     listItem.clear();
     memset(&identsInColumns, 0, sizeof(identsInColumns));
+}
+
+std::string ProcessingFileEntriesLong::buildFullPath(const char *dirPath, const char *fileName) {
+    std::string fullPath(dirPath);
+
+    if (fullPath.back() != '/')
+        fullPath.append(1, '/');
+
+    fullPath.append(fileName);
+
+    return fullPath;
 }
 
 ProcessingFileEntriesLong::~ProcessingFileEntriesLong() = default;

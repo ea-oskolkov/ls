@@ -11,23 +11,23 @@
 #include <pwd.h>
 #include <grp.h>
 
-const std::string &FileItem::getAccess() const {
+const std::string &FileItem::getAccess() const noexcept {
     return access;
 }
 
-uint64_t FileItem::getHardLinkCount() const {
+uint64_t FileItem::getHardLinkCount() const noexcept {
     return hardLinkCount;
 }
 
-const std::string &FileItem::getUserName() const {
+const std::string &FileItem::getUserName() const noexcept {
     return userName;
 }
 
-const std::string &FileItem::getGroupName() const {
+const std::string &FileItem::getGroupName() const noexcept {
     return groupName;
 }
 
-const std::string &FileItem::getSizeStr() const {
+const std::string &FileItem::getSizeStr() const noexcept {
     return sizeStr;
 }
 
@@ -50,25 +50,25 @@ std::string FileItem::getAccessStr(__mode_t mode) {
     std::string ret;
 
     if (S_ISLNK(mode))
-        ret.append(1,'l');
+        ret.append(1, 'l');
     else if (S_ISDIR(mode))
-        ret.append(1,'d');
+        ret.append(1, 'd');
     else if (S_ISBLK(mode))
-        ret.append(1,'b');
+        ret.append(1, 'b');
     else if (S_ISCHR(mode))
-        ret.append(1,'c');
+        ret.append(1, 'c');
     else if (S_ISFIFO(mode))
-        ret.append(1,'p');
+        ret.append(1, 'p');
     else if (S_ISSOCK(mode))
-        ret.append(1,'s');
+        ret.append(1, 's');
     else // is reg
-        ret.append(1,'-');
+        ret.append(1, '-');
 
-    for (const auto& item : accessMap) {
+    for (const auto &item: accessMap) {
         if (mode & item.first)
-            ret.append(1,item.second);
+            ret.append(1, item.second);
         else
-            ret.append(1,'-');
+            ret.append(1, '-');
     }
 
     return ret;
@@ -78,7 +78,7 @@ void FileItem::fillDateTime(__time_t mtime) {
 
     // mtime
     struct tm *tmp = std::localtime(&mtime);
-    if(tmp == nullptr)
+    if (tmp == nullptr)
         return;
 
     // Create a copy on the stack, because this is a pointer to an internal static buffer
@@ -99,8 +99,8 @@ void FileItem::fillDateTime(__time_t mtime) {
     dateColumn2 = buff;
 
     // Fill time or year
-    time_t currentTime = std::time(nullptr);
-    std::tm* currentTm = std::localtime(&currentTime);
+    const time_t currentTime = std::time(nullptr);
+    const std::tm *currentTm = std::localtime(&currentTime);
 
     if (showYear(&mtimeTm, currentTm, mtime, currentTime)) {
         // Year
@@ -117,52 +117,57 @@ void FileItem::fillDateTime(__time_t mtime) {
 }
 
 std::string FileItem::getUsername(__uid_t uid) {
-    auto pw = getpwuid(uid);
-    if(pw == nullptr)
+    passwd *pw = getpwuid(uid);
+    if (pw == nullptr)
         return {};
     return pw->pw_name;
 }
 
 std::string FileItem::getGroupname(__gid_t _gid) {
-    auto gid = getgrgid(_gid);
-    if(gid == nullptr)
+    group *gid = getgrgid(_gid);
+    if (gid == nullptr)
         return {};
     return gid->gr_name;
 }
 
-const std::string &FileItem::getLinkPath() const {
+const std::string &FileItem::getLinkPath() const noexcept {
     return linkPath;
 }
 
-const std::string &FileItem::getFileName() const {
+const std::string &FileItem::getFileName() const noexcept {
     return fileName;
 }
 
-const std::string &FileItem::getDateColumn1() const {
+const std::string &FileItem::getDateColumn1() const noexcept {
     return dateColumn1;
 }
 
-const std::string &FileItem::getDateColumn2() const {
+const std::string &FileItem::getDateColumn2() const noexcept {
     return dateColumn2;
 }
 
-const std::string &FileItem::getDateColumn3() const {
+const std::string &FileItem::getDateColumn3() const noexcept {
     return dateColumn3;
 }
 
-bool FileItem::showYear(std::tm *inputTm, std::tm *currentTm, __time_t inputTime, __time_t currentTime) {
-    uint64_t currentYear = currentTm->tm_year;
-    uint64_t inputYear = inputTm->tm_year;
+bool FileItem::showYear(
+        const std::tm *inputTm,
+        const std::tm *currentTm,
+        __time_t inputTime,
+        __time_t currentTime
+) {
+    const uint64_t inputYear = inputTm->tm_year;
+    const uint64_t currentYear = currentTm->tm_year;
 
     if (inputYear > currentYear)
         return true;
 
     const auto diffYear = currentYear - inputYear;
-    if (diffYear >  1)
+    if (diffYear > 1)
         return true;
 
     else if (diffYear == 1) {
-        auto diff = (11 % inputTm->tm_mon) + (currentTm->tm_mon + 1) + 1;
+        const int diff = (11 % inputTm->tm_mon) + (currentTm->tm_mon + 1) + 1;
         if (diff > 6) { // half a year
             return true;
         } else if (currentTm->tm_mon == inputTm->tm_mon) {
@@ -176,7 +181,7 @@ bool FileItem::showYear(std::tm *inputTm, std::tm *currentTm, __time_t inputTime
     else {
         if (inputTime > currentTime) {
             // one hour ahead or more
-            auto diffSec = std::difftime(inputTime, currentTime);
+            const double diffSec = std::difftime(inputTime, currentTime);
             if (diffSec >= (60.0 * 60.0))
                 return true;
         }
@@ -185,50 +190,35 @@ bool FileItem::showYear(std::tm *inputTm, std::tm *currentTm, __time_t inputTime
     return false;
 }
 
-std::optional<std::unique_ptr<FileItem>> FileItem::make(struct stat* st, const char* fileName, const char* fullPath,
-        FuncSz funcSz) {
-
-    if (st == nullptr || fileName == nullptr || funcSz == nullptr)
-        return std::nullopt;
-
-    auto rawPtr = new FileItem();
-    auto fileItemPtr = std::unique_ptr<FileItem>(rawPtr);
-
-    if (S_ISLNK(st->st_mode)) {
-        if (fullPath == nullptr)
-            return std::nullopt;
-
-        char buffLinkPath[PATH_MAX+1];
-        const ssize_t sz = readlink(fullPath, buffLinkPath, sizeof(buffLinkPath) - sizeof(char));
-        if (sz != -1) {
-            buffLinkPath[sz] = '\0';
-            fileItemPtr->linkPath.reserve(sz);
-            fileItemPtr->linkPath.append(buffLinkPath);
-        } else
-            throw std::runtime_error("readlink return error");
+FileItem::FileItem(
+        struct stat *st,
+        const char *fileName,
+        const char *linkPath,
+        FileItem::FuncSizeToStr funcSize
+)
+{
+    if (linkPath != nullptr)
+    {
+        this->linkPath.append(linkPath);
     }
 
     if (S_ISBLK(st->st_mode) || S_ISCHR(st->st_mode)) {
-        uint8_t major = st->st_rdev>>8;
+        uint8_t major = st->st_rdev >> 8;
         uint8_t minor = st->st_rdev;
-        fileItemPtr->sizeStr
-                .append(std::to_string(major))
-                .append(", ")
-                .append(std::to_string(minor));
-    } else
-        fileItemPtr->sizeStr = funcSz(st->st_size);
+        sizeStr
+            .append(std::to_string(major))
+            .append(", ")
+            .append(std::to_string(minor));
+    }
+    else {
+        sizeStr = funcSize(st->st_size);
+    }
 
-    fileItemPtr->fileName = fileName;
-    fileItemPtr->access = getAccessStr(st->st_mode);
-    fileItemPtr->userName = getUsername(st->st_uid);
-    fileItemPtr->groupName = getGroupname(st->st_gid);
-    fileItemPtr->hardLinkCount = st->st_nlink;
-    fileItemPtr->fillDateTime(st->st_mtime);
+    this->fileName = fileName;
+    this->access = getAccessStr(st->st_mode);
+    this->userName = getUsername(st->st_uid);
+    this->groupName = getGroupname(st->st_gid);
+    this->hardLinkCount = st->st_nlink;
 
-    return fileItemPtr;
+    fillDateTime(st->st_mtime);
 }
-
-FileItem::FileItem() {
-
-}
-
